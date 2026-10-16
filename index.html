@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Mini App Test</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --card: #181d26;
+    --line: #2a3140;
+    --text: #e8ecf3;
+    --muted: #8a94a7;
+    --accent: #3ea6ff;
+    --ok: #3ecf8e;
+    --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 16px 16px 40px;
+    min-height: 100vh;
+  }
+  .head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+  .avatar {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: var(--card); border: 1px solid var(--line);
+    object-fit: cover; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; font-weight: 700; color: var(--accent);
+  }
+  .head h1 { font-size: 20px; line-height: 1.2; word-break: break-word; }
+  .head p { color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .box {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; margin-bottom: 14px; overflow: hidden;
+  }
+  .box h2 { font-size: 13px; color: var(--muted); font-weight: 600; padding: 12px 14px 6px; }
+  .row {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 10px 14px; border-top: 1px solid var(--line); font-size: 14px;
+  }
+  .row span:first-child { color: var(--muted); flex-shrink: 0; }
+  .row span:last-child { text-align: right; word-break: break-all; }
+  pre {
+    padding: 12px 14px; font-size: 12px; color: var(--muted);
+    white-space: pre-wrap; word-break: break-all; border-top: 1px solid var(--line);
+  }
+  button {
+    width: 100%; padding: 14px; border: 0; border-radius: 12px;
+    background: var(--accent); color: #05121f; font-size: 15px; font-weight: 700;
+    margin-bottom: 10px; cursor: pointer;
+  }
+  button.alt { background: var(--card); color: var(--text); border: 1px solid var(--line); }
+  button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  #status { font-size: 13px; text-align: center; min-height: 18px; margin-top: 4px; }
+  .warn {
+    background: #2b2310; border: 1px solid #5c4a14; color: #f0c859;
+    border-radius: 12px; padding: 12px 14px; font-size: 13px; margin-bottom: 14px; display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="warn" id="warn">
+  This page was not opened inside Telegram, so no user data is available. Open it through your bot's Mini App button.
+</div>
+
+<div class="head">
+  <div class="avatar" id="avatar">?</div>
+  <div>
+    <h1 id="name">Guest</h1>
+    <p id="uname">@unknown</p>
+  </div>
+</div>
+
+<div class="box">
+  <h2>User</h2>
+  <div class="row"><span>User ID / chat_id</span><span id="uid">-</span></div>
+  <div class="row"><span>First name</span><span id="fn">-</span></div>
+  <div class="row"><span>Last name</span><span id="ln">-</span></div>
+  <div class="row"><span>Username</span><span id="un">-</span></div>
+  <div class="row"><span>Language</span><span id="lang">-</span></div>
+  <div class="row"><span>Premium</span><span id="prem">-</span></div>
+  <div class="row"><span>Can message you</span><span id="pm">-</span></div>
+</div>
+
+<div class="box">
+  <h2>Session</h2>
+  <div class="row"><span>Platform</span><span id="plat">-</span></div>
+  <div class="row"><span>Telegram version</span><span id="ver">-</span></div>
+  <div class="row"><span>Start param (referral)</span><span id="sp">-</span></div>
+  <div class="row"><span>Chat type</span><span id="ct">-</span></div>
+  <div class="row"><span>Server</span><span id="srv">checking...</span></div>
+</div>
+
+<div class="box">
+  <h2>Raw initData</h2>
+  <pre id="raw">-</pre>
+</div>
+
+<button id="btnSave">Save my user to backend</button>
+<button class="alt" id="btnCopy">Copy my ID</button>
+<div id="status"></div>
+
+<script>
+  // Worker API URL (no trailing slash)
+  const BACKEND_URL = "https://daily-broadcast-backend.rajkumar222er.workers.dev";
+
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const $ = (id) => document.getElementById(id);
+  const set = (id, v) => { $(id).textContent = (v === undefined || v === null || v === "") ? "-" : v; };
+
+  function setStatus(msg, ok) {
+    const s = $("status");
+    s.textContent = msg;
+    s.style.color = ok ? "var(--ok)" : "var(--err)";
+  }
+
+  let user = null;
+
+  if (tg && tg.initData) {
+    tg.ready();
+    tg.expand();
+
+    const d = tg.initDataUnsafe || {};
+    user = d.user || null;
+
+    if (user) {
+      const full = [user.first_name, user.last_name].filter(Boolean).join(" ");
+      $("name").textContent = full || "User";
+      $("uname").textContent = user.username ? "@" + user.username : "no username";
+
+      if (user.photo_url) {
+        const img = document.createElement("img");
+        img.className = "avatar";
+        img.src = user.photo_url;
+        img.alt = "";
+        $("avatar").replaceWith(img);
+      } else {
+        $("avatar").textContent = (user.first_name || "?").charAt(0).toUpperCase();
+      }
+
+      set("uid", user.id);
+      set("fn", user.first_name);
+      set("ln", user.last_name);
+      set("un", user.username ? "@" + user.username : "");
+      set("lang", user.language_code);
+      set("prem", user.is_premium ? "Yes" : "No");
+      set("pm", user.allows_write_to_pm ? "Yes" : "No");
+    }
+
+    set("plat", tg.platform);
+    set("ver", tg.version);
+    set("sp", d.start_param);
+    set("ct", d.chat_type);
+    $("raw").textContent = tg.initData;
+  } else {
+    $("warn").style.display = "block";
+  }
+
+  $("btnCopy").onclick = async () => {
+    if (!user) return setStatus("No user data available.", false);
+    try {
+      await navigator.clipboard.writeText(String(user.id));
+      setStatus("ID copied.", true);
+    } catch (e) {
+      setStatus("Copy failed. Your ID is " + user.id, false);
+    }
+  };
+
+  // Sends verified initData to the Worker; Worker saves the user in D1
+  async function registerUser(silent) {
+    if (!tg || !tg.initData) {
+      $("srv").textContent = "no Telegram data";
+      if (!silent) setStatus("Open this page inside Telegram.", false);
+      return;
+    }
+    $("srv").textContent = "connecting...";
+    try {
+      const res = await fetch(BACKEND_URL + "/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: tg.initData })
+      });
+      const text = await res.text();
+      if (res.ok) {
+        $("srv").textContent = "connected, user saved";
+        $("srv").style.color = "var(--ok)";
+        if (!silent) setStatus("Saved: " + text, true);
+      } else {
+        $("srv").textContent = "error " + res.status;
+        $("srv").style.color = "var(--err)";
+        setStatus("Error " + res.status + ": " + text, false);
+      }
+    } catch (e) {
+      $("srv").textContent = "not reachable";
+      $("srv").style.color = "var(--err)";
+      setStatus("Network error: " + e.message, false);
+    }
+  }
+
+  $("btnSave").onclick = () => registerUser(false);
+
+  // Auto-register as soon as the Mini App opens
+  registerUser(true);
+</script>
+</body>
+</html>
